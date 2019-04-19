@@ -1,7 +1,7 @@
 /*
- *Netmedias
- *https://github.com/nassir-malik/IOT-Smart-Temperature-Switch-With-Alexa-NodeMcu
- *  Created on: 09.19.2017
+ * Alexa - Heroku - NodeMCU  voice controlled device
+ * git clone https://github.com/juneskw/devapp-esp8266
+ *
  *  
  */
 #include <dht.h>
@@ -226,4 +226,3 @@ void getTemp(){
 }
 
 double Celcius2Fahrenheit(double celsius){return celsius * 9 / 5 + 32;}
-
