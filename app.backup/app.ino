@@ -12,7 +12,6 @@
 #include <Hash.h>
 #include <dht.h>
 
-#define	VERSION		"20190503 16:30"
 
 /*
  *	TODO: Network and Web service configuration 
@@ -30,7 +29,7 @@
  *	TODO: GPIO pin configuration
  *
  *		1.	define GPIO pin no. of nodeMCU  for  DHT11 temperature sensor signal pin
- *		2.	define GPIO pin no. of nodeMCU  for  LED   switch signal pin
+ *		2.	define GPIO pin no. of nodeMCU  for  LED   switch signal pin, ( D0 = 16)
  *			refer to breadboard schematic
  */
 
@@ -63,38 +62,41 @@ String pstrCurState		=""		;
 int nPingCount		= 	0		;
 int bTriggerEnable 	=	0		;
 
+int	count =0;	/* connection count */
 
 void webSocketEvent(WStype_t wstype, uint8_t * payload, size_t length) { 
 
-	switch(wstype) {
+switch(wstype) {
 
-		case WStype_DISCONNECTED:
-			Serial.println("event> WebSocket is disconnected ! Connecting ...");
-			
-			webSocket.begin(HOST, PORT, PATH);	/*	try to connection	*/
-			webSocket.onEvent(webSocketEvent);	/*	delete ?	-skw	*/
-			break;
+	case WStype_DISCONNECTED:
+		Serial.print  ("event> WebSocket is disconnected ! Connecting ...");
+		Serial.println(count);
+		
+		webSocket.begin(HOST, PORT, PATH);	/*	try to connect again	*/
+		webSocket.onEvent(webSocketEvent);
+		break;
 
-		case WStype_CONNECTED:
-			Serial.println("event> WebSocket is... connected !");
-			Serial.println(VERSION);
-			
-			webSocket.sendTXT("Connected");		/*	notify message to server */
-			break;
+	case WStype_CONNECTED:
+		Serial.println("event> WebSocket is... connected !");
+		count =0;
+	  
+		webSocket.sendTXT("Connected");		/*	send message to server */
+		break;
 
-		case WStype_TEXT:	
-			Serial.println("event> Received TEXT type web socket");		/* <<<<<<<<<<<<<<<< */
+	case WStype_TEXT:
+		Serial.println("event> Received TEXT type web socket");
 
-			doWebSocketRequest((char*)payload);
-			break;
-			
-		case WStype_BIN:
-			Serial.println("event> Received BIN  type web socket");
+		doWebSocketRequest((char*)payload);
+		break;
+		
+	case WStype_BIN:
 
-//			hexdump(payload, length);
-			webSocket.sendBIN(payload, length);	/*	send back to server	? */	/*	delete ?  -skw	*/
-			break;
-	}
+		hexdump(payload, length);
+		Serial.println("event> Received BIN  type web socket");
+
+		webSocket.sendBIN(payload, length);	/*	send back to server	? */	/*	delete ?  -skw	*/
+		break;
+}
 
 }
 
@@ -167,20 +169,7 @@ void doWebSocketRequest( String payload ){
 
 	String jsonResponse = "{\"version\": \"1.0\",\"sessionAttributes\": {},\"response\": {\"outputSpeech\": {\"type\": \"PlainText\",\"text\": \"<text>\"},\"shouldEndSession\": true}}";
 	/*
-		
-		The command format = RequestJson: ( Alexa -> webapp )
-		{
-			refer to JSON input
-		}
-		
-		The payload format = jsonRequest: ( webapp -> devapp )
-		{
-			{"object": "led", "value": "on",  "query": "?"  }
-			{"object": "led", "value": "off", "query": "cmd"}
-			.....
-		}
-
-		The response format = jsonResponse: ( devapp -> Alexa )
+		The response message format in json:
 		{ 
 			"version": "1.0",
 			"sessionAttributes": {},
@@ -193,6 +182,10 @@ void doWebSocketRequest( String payload ){
 			}
 		}
 		
+		The payload  message format in json:
+		{
+			????????
+		}
 		
 	*/
 
@@ -211,15 +204,19 @@ void doWebSocketRequest( String payload ){
 
 		if       (value=="on" ){		/*	command + "on"	*/
 			digitalWrite(PIN_LED, HIGH);	/*	LED ON	*/
-			message = "ON";
+			message = "{\"state\":\"ON\"}";
+			pstrCurState = "ON";
 
 		}else if (value=="off"){		/*	command + "off"	*/
 			digitalWrite(PIN_LED, LOW );	/*	LED OFF	*/
-			message = "OFF";
-		}else if (value=="deactivate"){	
-			bTriggerEnable = 0;			/*	deactivate trigger	*/ /* ' deactivate switch trigger! ' */
+			message = "{\"state\":\"OFF\"}";
+			pstrCurState = "OFF";
 
-		}else{							/*	  activate trigger	*/ /* '   activate switch trigger! ' */ 
+		}else if (value=="deactivate"){
+			bTriggerEnable = 0;			/*	deactivate trigger	*/
+
+										/*	  activate trigger	*/
+		}else{
 			String object = root["object"];
 
 			//set trigger for temperature or humidity
@@ -227,8 +224,8 @@ void doWebSocketRequest( String payload ){
 			pstrTriggerValue 	= value	;
 			bTriggerEnable 		= 1;
 		}
-
-		jsonResponse.replace("<text>", "command is done");
+	
+		jsonResponse.replace("<text>", "It is done");		/*	after command is accepted, alexa will say 'it is done' */
 		  
 	}else if(query == "?"){
 		Serial.println("Query is inquiry!");
@@ -236,29 +233,29 @@ void doWebSocketRequest( String payload ){
 		String value = root["value"];	/*	*/		
 //		Serial.print("value:");Serial.print(value);
 		
-		int state = digitalRead(PIN_LED);	/*	state = ON or OFF	*/
+		int state = digitalRead(PIN_LED);	/*	state = ON or OFF	*/	/*  why read this for ??? -skw*/
 
-		if(value=="state"  ){			/* ' what is led ? ' |  ' what is state ? ' | ' what is led state ? '  */
-			if( state == HIGH ){
-				message = "ON";
+		if      (value=="switch"  ){
+			if(pstrCurState=="ON"){
+				message = "{\"state\":\"ON\"}";
 			}else{
-				message = "OFF";
+				message = "{\"state\":\"OFF\"}";
 			}
-			jsonResponse.replace("<text>", "current LED state is " + message );
+			/*?? do something with message ?? */
 			
-		}else if(value=="humidity"){		/* ' what is the current humidity ?' */
+		}else if(value=="humidity"){
 			Serial.println("target> response of humidity"   );
 			jsonResponse.replace("<text>", "current humidity is " + String(DHT.humidity) + " percent");
 		  
-		}else if(value=="temperature"){  	/* ' what is the current temperature ?' */
+		}else if(value=="temperature"){  
 			Serial.println("target> response of temperature");
 			jsonResponse.replace("<text>", "current temperature is " + String( C2F(DHT.temperature) ) + " fahrenheit");
 		}
 	}else{
-		Serial.println("target> Your ask is not recognized");
+		Serial.println("target> command is not recognized");
 	}
 	
-
+	//jsonResponse.replace("<text>", "Garage door " + instance + " is " + message );
 	Serial.print("target>sending response back is : ");
 	Serial.println(jsonResponse);
 
